@@ -129,6 +129,20 @@ jobs:
             -MakeTarget "${{ env.BUILD_TARGET }}" `
             -Jobs $env:JOBS
 
+      - name: List firmware outputs
+        shell: bash
+        run: |
+          find openwrt-src/bin/targets -type f | sort
+
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: openwrt-${{ env.OPENWRT_REF }}-${{ steps.config_state.outputs.config_hash }}-${{ github.run_id }}
+          path: |
+            openwrt-src/bin/targets/**
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Save build cache
         if: success() && steps.cache_restore.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
