@@ -1,0 +1,141 @@
+name: OpenWrt CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/**"
+      - "scripts/**"
+      - ".ai/task.md"
+      - ".ai/constraints.md"
+      - ".config"
+  workflow_dispatch:
+    inputs:
+      openwrt_ref:
+        description: OpenWrt branch or ref
+        required: false
+        default: openwrt-25.12
+      config_file:
+        description: Repository-relative OpenWrt config file
+        required: false
+        default: .config
+      build_target:
+        description: make target to run
+        required: false
+        default: world
+      jobs:
+        description: Parallel jobs
+        required: false
+        default: "4"
+      ccache_size:
+        description: Max ccache size
+        required: false
+        default: 20G
+
+permissions:
+  contents: read
+
+concurrency:
+  group: openwrt-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    env:
+      OPENWRT_REF: ${{ inputs.openwrt_ref || 'openwrt-25.12' }}
+      CONFIG_FILE: ${{ github.workspace }}/${{ inputs.config_file || '.config' }}
+      BUILD_TARGET: ${{ inputs.build_target || 'world' }}
+      JOBS: ${{ inputs.jobs || '4' }}
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_MAXSIZE: ${{ inputs.ccache_size || '20G' }}
+      DEBIAN_FRONTEND: noninteractive
+    steps:
+      - name: Checkout control repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Resolve config state
+        id: config_state
+        shell: bash
+        run: |
+          if [ -f "$CONFIG_FILE" ]; then
+            config_hash=$(sha256sum "$CONFIG_FILE" | awk '{print $1}')
+          else
+            config_hash=no-config
+          fi
+          echo "config_hash=$config_hash" >> "$GITHUB_OUTPUT"
+
+      - name: Clone OpenWrt source
+        shell: bash
+        run: |
+          git clone --depth 1 --filter=blob:none --single-branch --branch "${OPENWRT_REF}" https://github.com/openwrt/openwrt.git openwrt-src
+
+      - name: Restore build cache
+        id: cache_restore
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            openwrt-src/dl
+            openwrt-src/staging_dir
+            openwrt-src/build_dir
+            .ccache
+          key: openwrt-${{ runner.os }}-${{ env.OPENWRT_REF }}-${{ steps.config_state.outputs.config_hash }}
+          restore-keys: |
+            openwrt-${{ runner.os }}-${{ env.OPENWRT_REF }}-
+            openwrt-${{ runner.os }}-
+
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            bison \
+            ccache \
+            clang \
+            flex \
+            file \
+            gawk \
+            gcc-multilib \
+            g++-multilib \
+            gettext \
+            git \
+            libelf-dev \
+            libncurses5-dev \
+            libssl-dev \
+            libtool-bin \
+            python3 \
+            python3-dev \
+            python3-setuptools \
+            rsync \
+            squashfs-tools \
+            subversion \
+            swig \
+            unzip \
+            wget \
+            xsltproc \
+            zlib1g-dev
+
+      - name: Run build
+        shell: pwsh
+        run: |
+          & "${{ github.workspace }}/scripts/Invoke-OpenWrtBuild.ps1" `
+            -SourceDir "${{ github.workspace }}/openwrt-src" `
+            -ConfigPath "${{ env.CONFIG_FILE }}" `
+            -MakeTarget "${{ env.BUILD_TARGET }}" `
+            -Jobs $env:JOBS
+
+      - name: Save build cache
+        if: success() && steps.cache_restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            openwrt-src/dl
+            openwrt-src/staging_dir
+            openwrt-src/build_dir
+            .ccache
+          key: openwrt-${{ runner.os }}-${{ env.OPENWRT_REF }}-${{ steps.config_state.outputs.config_hash }}

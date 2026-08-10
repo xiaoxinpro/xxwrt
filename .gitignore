@@ -1,0 +1,7 @@
+.ai/token.key
+.ai/github-actions/summary.md
+.ai/github-actions/summary.json
+.ai/github-actions/prompt.md
+.ai/github-actions/logs/
+openwrt-src/
+.ccache/
