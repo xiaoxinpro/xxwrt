@@ -23,6 +23,9 @@ if (-not $env:CCACHE_DIR) {
 }
 
 New-Item -ItemType Directory -Force -Path $env:CCACHE_DIR | Out-Null
+$env:CCACHE_COMPRESS = '1'
+$env:CCACHE_COMPILERCHECK = 'content'
+$env:CCACHE_BASEDIR = $SourceDir
 $env:PATH = "/usr/lib/ccache:$env:PATH"
 
 Push-Location $SourceDir
@@ -36,6 +39,7 @@ try {
 
   if (Get-Command ccache -ErrorAction SilentlyContinue) {
     & ccache -M $env:CCACHE_MAXSIZE | Out-Null
+    & ccache -z | Out-Null
   }
 
   & ./scripts/feeds update -a
@@ -44,6 +48,10 @@ try {
 
   & make download -j $Jobs
   & make $MakeTarget -j $Jobs
+
+  if (Get-Command ccache -ErrorAction SilentlyContinue) {
+    & ccache -s
+  }
 }
 finally {
   Pop-Location

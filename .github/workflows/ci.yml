@@ -31,7 +31,7 @@ on:
       ccache_size:
         description: Max ccache size
         required: false
-        default: 20G
+        default: 2G
 
 permissions:
   contents: read
@@ -50,7 +50,7 @@ jobs:
       BUILD_TARGET: ${{ inputs.build_target || 'world' }}
       JOBS: ${{ inputs.jobs || '4' }}
       CCACHE_DIR: ${{ github.workspace }}/.ccache
-      CCACHE_MAXSIZE: ${{ inputs.ccache_size || '20G' }}
+      CCACHE_MAXSIZE: ${{ inputs.ccache_size || '2G' }}
       DEBIAN_FRONTEND: noninteractive
     steps:
       - name: Checkout control repo
@@ -74,19 +74,45 @@ jobs:
         run: |
           git clone --depth 1 --filter=blob:none --single-branch --branch "${OPENWRT_REF}" https://github.com/openwrt/openwrt.git openwrt-src
 
-      - name: Restore build cache
-        id: cache_restore
+      - name: Resolve OpenWrt source state
+        id: openwrt_state
+        shell: bash
+        run: |
+          openwrt_sha=$(git -C openwrt-src rev-parse HEAD)
+          echo "openwrt_sha=$openwrt_sha" >> "$GITHUB_OUTPUT"
+          echo "openwrt_short_sha=${openwrt_sha:0:12}" >> "$GITHUB_OUTPUT"
+
+      - name: Restore download cache
+        id: cache_dl_restore
+        uses: actions/cache/restore@v4
+        with:
+          path: openwrt-src/dl
+          key: openwrt-dl-${{ runner.os }}-${{ env.OPENWRT_REF }}-${{ steps.openwrt_state.outputs.openwrt_sha }}-${{ steps.config_state.outputs.config_hash }}
+          restore-keys: |
+            openwrt-dl-${{ runner.os }}-${{ env.OPENWRT_REF }}-${{ steps.openwrt_state.outputs.openwrt_sha }}-
+            openwrt-dl-${{ runner.os }}-${{ env.OPENWRT_REF }}-
+
+      - name: Restore ccache
+        id: cache_ccache_restore
+        uses: actions/cache/restore@v4
+        with:
+          path: .ccache
+          key: openwrt-ccache-${{ runner.os }}-${{ env.OPENWRT_REF }}-${{ steps.config_state.outputs.config_hash }}-${{ github.run_id }}
+          restore-keys: |
+            openwrt-ccache-${{ runner.os }}-${{ env.OPENWRT_REF }}-${{ steps.config_state.outputs.config_hash }}-
+            openwrt-ccache-${{ runner.os }}-${{ env.OPENWRT_REF }}-
+
+      - name: Restore incremental build cache
+        id: cache_build_restore
         uses: actions/cache/restore@v4
         with:
           path: |
-            openwrt-src/dl
             openwrt-src/staging_dir
             openwrt-src/build_dir
-            .ccache
-          key: openwrt-${{ runner.os }}-${{ env.OPENWRT_REF }}-${{ steps.config_state.outputs.config_hash }}
+          key: openwrt-build-${{ runner.os }}-${{ env.OPENWRT_REF }}-${{ steps.openwrt_state.outputs.openwrt_sha }}-${{ steps.config_state.outputs.config_hash }}
           restore-keys: |
-            openwrt-${{ runner.os }}-${{ env.OPENWRT_REF }}-
-            openwrt-${{ runner.os }}-
+            openwrt-build-${{ runner.os }}-${{ env.OPENWRT_REF }}-${{ steps.openwrt_state.outputs.openwrt_sha }}-
+            openwrt-build-${{ runner.os }}-${{ env.OPENWRT_REF }}-
 
       - name: Install build dependencies
         shell: bash
@@ -137,19 +163,31 @@ jobs:
       - name: Upload firmware artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: openwrt-${{ env.OPENWRT_REF }}-${{ steps.config_state.outputs.config_hash }}-${{ github.run_id }}
+          name: openwrt-${{ env.OPENWRT_REF }}-${{ steps.openwrt_state.outputs.openwrt_short_sha }}-${{ steps.config_state.outputs.config_hash }}-${{ github.run_id }}
           path: |
             openwrt-src/bin/targets/**
           if-no-files-found: error
           retention-days: 14
 
-      - name: Save build cache
-        if: success() && steps.cache_restore.outputs.cache-hit != 'true'
+      - name: Save download cache
+        if: always() && !cancelled() && steps.cache_dl_restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: openwrt-src/dl
+          key: openwrt-dl-${{ runner.os }}-${{ env.OPENWRT_REF }}-${{ steps.openwrt_state.outputs.openwrt_sha }}-${{ steps.config_state.outputs.config_hash }}
+
+      - name: Save ccache
+        if: always() && !cancelled()
+        uses: actions/cache/save@v4
+        with:
+          path: .ccache
+          key: openwrt-ccache-${{ runner.os }}-${{ env.OPENWRT_REF }}-${{ steps.config_state.outputs.config_hash }}-${{ github.run_id }}
+
+      - name: Save incremental build cache
+        if: success() && steps.cache_build_restore.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: |
-            openwrt-src/dl
             openwrt-src/staging_dir
             openwrt-src/build_dir
-            .ccache
-          key: openwrt-${{ runner.os }}-${{ env.OPENWRT_REF }}-${{ steps.config_state.outputs.config_hash }}
+          key: openwrt-build-${{ runner.os }}-${{ env.OPENWRT_REF }}-${{ steps.openwrt_state.outputs.openwrt_sha }}-${{ steps.config_state.outputs.config_hash }}
