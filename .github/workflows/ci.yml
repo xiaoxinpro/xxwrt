@@ -160,6 +160,33 @@ jobs:
         run: |
           find openwrt-src/bin/targets -type f | sort
 
+      - name: Verify required packages in firmware manifest
+        shell: pwsh
+        run: |
+          $requiredPackages = @(
+            'dropbear',
+            'irqbalance',
+            'curl',
+            'ca-bundle',
+            'tcpdump-mini',
+            'iperf3',
+            'mtr-json',
+            'bind-dig',
+            'block-mount',
+            'lsblk',
+            'e2fsprogs',
+            'kmod-fs-ext4',
+            'smartmontools',
+            'luci-app-sqm',
+            'luci-app-nlbwmon',
+            'luci-app-banip',
+            'luci-proto-wireguard',
+            'wireguard-tools'
+          )
+          & "${{ github.workspace }}/scripts/Assert-OpenWrtPackages.ps1" `
+            -ManifestPath "${{ github.workspace }}/openwrt-src/bin/targets/x86/64/openwrt-x86-64-generic.manifest" `
+            -ManifestPackages $requiredPackages
+
       - name: Upload firmware artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -167,6 +194,20 @@ jobs:
           path: |
             openwrt-src/bin/targets/**
           if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload build diagnostics
+        if: always() && !cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: openwrt-diagnostics-${{ env.OPENWRT_REF }}-${{ steps.openwrt_state.outputs.openwrt_short_sha }}-${{ steps.config_state.outputs.config_hash }}-${{ github.run_id }}
+          path: |
+            openwrt-src/.config
+            openwrt-src/bin/targets/**/*.manifest
+            openwrt-src/bin/targets/**/config.buildinfo
+            openwrt-src/bin/targets/**/feeds.buildinfo
+            openwrt-src/bin/targets/**/version.buildinfo
+          if-no-files-found: ignore
           retention-days: 14
 
       - name: Save download cache

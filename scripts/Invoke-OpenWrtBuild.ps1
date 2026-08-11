@@ -30,13 +30,6 @@ $env:PATH = "/usr/lib/ccache:$env:PATH"
 
 Push-Location $SourceDir
 try {
-  if ($ConfigPath -and (Test-Path -LiteralPath $ConfigPath)) {
-    Copy-Item -LiteralPath $ConfigPath -Destination (Join-Path $SourceDir '.config') -Force
-  }
-  else {
-    Write-Host 'No repository config file supplied; using OpenWrt defaults.'
-  }
-
   if (Get-Command ccache -ErrorAction SilentlyContinue) {
     & ccache -M $env:CCACHE_MAXSIZE | Out-Null
     & ccache -z | Out-Null
@@ -44,7 +37,22 @@ try {
 
   & ./scripts/feeds update -a
   & ./scripts/feeds install -a
+
+  if ($ConfigPath -and (Test-Path -LiteralPath $ConfigPath)) {
+    Copy-Item -LiteralPath $ConfigPath -Destination (Join-Path $SourceDir '.config') -Force
+  }
+  else {
+    Write-Host 'No repository config file supplied; using OpenWrt defaults.'
+  }
+
   & make defconfig
+
+  if ($ConfigPath -and (Test-Path -LiteralPath $ConfigPath)) {
+    $assertScript = Join-Path $PSScriptRoot 'Assert-OpenWrtPackages.ps1'
+    & $assertScript `
+      -RequestedConfigPath $ConfigPath `
+      -FinalConfigPath (Join-Path $SourceDir '.config')
+  }
 
   & make download -j $Jobs
   & make $MakeTarget -j $Jobs

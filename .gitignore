@@ -3,5 +3,7 @@
 .ai/github-actions/summary.json
 .ai/github-actions/prompt.md
 .ai/github-actions/logs/
+.ai/github-actions/artifacts/
+.ai/github-actions/inspect/
 openwrt-src/
 .ccache/
