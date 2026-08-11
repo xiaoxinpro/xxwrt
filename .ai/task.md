@@ -7,3 +7,7 @@
 - OpenWrt 源码必须在 Actions 中拉取，不允许提交到本仓库。
 - 构建中间产物尽量使用 Actions 缓存，加快后续构建。
 - 所有文档默认中文，只有 `AGENTS.md` 必须使用英文。
+
+## 缓存验证
+
+触发一次同 `.config` 的重复构建，用于验证 `dl`、`ccache`、`staging_dir` 和 `build_dir` 缓存对后续构建速度的影响。
