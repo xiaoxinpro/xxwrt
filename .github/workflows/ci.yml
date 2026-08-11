@@ -208,6 +208,7 @@ jobs:
             openwrt-src/bin/targets/**/feeds.buildinfo
             openwrt-src/bin/targets/**/version.buildinfo
           if-no-files-found: ignore
+          include-hidden-files: true
           retention-days: 14
 
       - name: Save download cache
