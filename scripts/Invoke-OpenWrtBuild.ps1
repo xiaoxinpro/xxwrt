@@ -29,6 +29,28 @@ function Invoke-CheckedNativeCommand {
   }
 }
 
+function Invoke-OpenWrtMakeTarget {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$Target,
+
+    [Parameter(Mandatory = $true)]
+    [int]$Jobs,
+
+    [Parameter(Mandatory = $true)]
+    [string]$FailureMessage
+  )
+
+  & make $Target -j $Jobs
+  if ($LASTEXITCODE -eq 0) {
+    return
+  }
+
+  Write-Host "Parallel make target failed; retrying with -j1 V=s: $Target"
+  & make $Target -j1 V=s
+  throw $FailureMessage
+}
+
 function Remove-PathIfExists {
   param(
     [Parameter(Mandatory = $true)]
@@ -237,11 +259,13 @@ try {
       -FinalConfigPath (Join-Path $SourceDir '.config')
   }
 
-  Invoke-CheckedNativeCommand `
-    -Command { & make download -j $Jobs } `
+  Invoke-OpenWrtMakeTarget `
+    -Target 'download' `
+    -Jobs $Jobs `
     -FailureMessage 'OpenWrt package download failed.'
-  Invoke-CheckedNativeCommand `
-    -Command { & make $MakeTarget -j $Jobs } `
+  Invoke-OpenWrtMakeTarget `
+    -Target $MakeTarget `
+    -Jobs $Jobs `
     -FailureMessage "OpenWrt make target failed: $MakeTarget"
 
   if (Get-Command ccache -ErrorAction SilentlyContinue) {
