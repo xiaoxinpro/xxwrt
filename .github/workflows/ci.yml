@@ -82,13 +82,42 @@ jobs:
           echo "openwrt_sha=$openwrt_sha" >> "$GITHUB_OUTPUT"
           echo "openwrt_short_sha=${openwrt_sha:0:12}" >> "$GITHUB_OUTPUT"
 
+      - name: Resolve third-party source state
+        id: third_party_state
+        shell: bash
+        run: |
+          set -euo pipefail
+          : > third-party-sources.buildinfo
+
+          resolve_ref() {
+            local name="$1"
+            local url="$2"
+            local branch="$3"
+            local sha
+            sha=$(git ls-remote --heads "$url" "$branch" | awk '{print $1}')
+            if [ -z "$sha" ]; then
+              echo "::error::Cannot resolve $name branch $branch from $url"
+              exit 1
+            fi
+            echo "${name}_sha=$sha" >> "$GITHUB_OUTPUT"
+            printf '%s %s %s %s\n' "$name" "$branch" "$sha" "$url" >> third-party-sources.buildinfo
+          }
+
+          resolve_ref helloworld https://github.com/fw876/helloworld.git dev
+          resolve_ref luci_app_mosdns https://github.com/sbwml/luci-app-mosdns.git v5
+          resolve_ref v2ray_geodata https://github.com/sbwml/v2ray-geodata.git master
+
+          third_party_hash=$(sha256sum third-party-sources.buildinfo | awk '{print $1}')
+          echo "third_party_hash=$third_party_hash" >> "$GITHUB_OUTPUT"
+
       - name: Restore download cache
         id: cache_dl_restore
         uses: actions/cache/restore@v4
         with:
           path: openwrt-src/dl
-          key: openwrt-dl-${{ runner.os }}-${{ env.OPENWRT_REF }}-${{ steps.openwrt_state.outputs.openwrt_sha }}-${{ steps.config_state.outputs.config_hash }}
+          key: openwrt-dl-${{ runner.os }}-${{ env.OPENWRT_REF }}-${{ steps.openwrt_state.outputs.openwrt_sha }}-${{ steps.config_state.outputs.config_hash }}-${{ steps.third_party_state.outputs.third_party_hash }}
           restore-keys: |
+            openwrt-dl-${{ runner.os }}-${{ env.OPENWRT_REF }}-${{ steps.openwrt_state.outputs.openwrt_sha }}-${{ steps.config_state.outputs.config_hash }}-
             openwrt-dl-${{ runner.os }}-${{ env.OPENWRT_REF }}-${{ steps.openwrt_state.outputs.openwrt_sha }}-
             openwrt-dl-${{ runner.os }}-${{ env.OPENWRT_REF }}-
 
@@ -97,8 +126,9 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: .ccache
-          key: openwrt-ccache-${{ runner.os }}-${{ env.OPENWRT_REF }}-${{ steps.config_state.outputs.config_hash }}-${{ github.run_id }}
+          key: openwrt-ccache-${{ runner.os }}-${{ env.OPENWRT_REF }}-${{ steps.config_state.outputs.config_hash }}-${{ steps.third_party_state.outputs.third_party_hash }}-${{ github.run_id }}
           restore-keys: |
+            openwrt-ccache-${{ runner.os }}-${{ env.OPENWRT_REF }}-${{ steps.config_state.outputs.config_hash }}-${{ steps.third_party_state.outputs.third_party_hash }}-
             openwrt-ccache-${{ runner.os }}-${{ env.OPENWRT_REF }}-${{ steps.config_state.outputs.config_hash }}-
             openwrt-ccache-${{ runner.os }}-${{ env.OPENWRT_REF }}-
 
@@ -109,8 +139,9 @@ jobs:
           path: |
             openwrt-src/staging_dir
             openwrt-src/build_dir
-          key: openwrt-build-${{ runner.os }}-${{ env.OPENWRT_REF }}-${{ steps.openwrt_state.outputs.openwrt_sha }}-${{ steps.config_state.outputs.config_hash }}
+          key: openwrt-build-${{ runner.os }}-${{ env.OPENWRT_REF }}-${{ steps.openwrt_state.outputs.openwrt_sha }}-${{ steps.config_state.outputs.config_hash }}-${{ steps.third_party_state.outputs.third_party_hash }}
           restore-keys: |
+            openwrt-build-${{ runner.os }}-${{ env.OPENWRT_REF }}-${{ steps.openwrt_state.outputs.openwrt_sha }}-${{ steps.config_state.outputs.config_hash }}-
             openwrt-build-${{ runner.os }}-${{ env.OPENWRT_REF }}-${{ steps.openwrt_state.outputs.openwrt_sha }}-
             openwrt-build-${{ runner.os }}-${{ env.OPENWRT_REF }}-
 
@@ -148,6 +179,10 @@ jobs:
 
       - name: Run build
         shell: pwsh
+        env:
+          THIRD_PARTY_HELLOWORLD_SHA: ${{ steps.third_party_state.outputs.helloworld_sha }}
+          THIRD_PARTY_LUCI_APP_MOSDNS_SHA: ${{ steps.third_party_state.outputs.luci_app_mosdns_sha }}
+          THIRD_PARTY_V2RAY_GEODATA_SHA: ${{ steps.third_party_state.outputs.v2ray_geodata_sha }}
         run: |
           & "${{ github.workspace }}/scripts/Invoke-OpenWrtBuild.ps1" `
             -SourceDir "${{ github.workspace }}/openwrt-src" `
@@ -181,7 +216,29 @@ jobs:
             'luci-app-nlbwmon',
             'luci-app-banip',
             'luci-proto-wireguard',
-            'wireguard-tools'
+            'wireguard-tools',
+            'luci-app-ssr-plus',
+            'luci-i18n-ssr-plus-zh-cn',
+            'luci-app-mosdns',
+            'luci-i18n-mosdns-zh-cn',
+            'mosdns',
+            'v2dat',
+            'v2ray-geoip',
+            'v2ray-geosite',
+            'xray-core',
+            'chinadns-ng',
+            'dns2tcp',
+            '3proxy',
+            'mihomo',
+            'shadow-tls',
+            'naiveproxy',
+            'shadowsocks-rust-sslocal',
+            'shadowsocks-rust-ssserver',
+            'simple-obfs-client',
+            'v2ray-plugin',
+            'shadowsocksr-libev-ssr-local',
+            'shadowsocksr-libev-ssr-redir',
+            'shadowsocksr-libev-ssr-server'
           )
           & "${{ github.workspace }}/scripts/Assert-OpenWrtPackages.ps1" `
             -ManifestPath "${{ github.workspace }}/openwrt-src/bin/targets/x86/64/openwrt-x86-64-generic.manifest" `
@@ -203,6 +260,8 @@ jobs:
           name: openwrt-diagnostics-${{ env.OPENWRT_REF }}-${{ steps.openwrt_state.outputs.openwrt_short_sha }}-${{ steps.config_state.outputs.config_hash }}-${{ github.run_id }}
           path: |
             openwrt-src/.config
+            openwrt-src/third-party-sources.buildinfo
+            third-party-sources.buildinfo
             openwrt-src/bin/targets/**/*.manifest
             openwrt-src/bin/targets/**/config.buildinfo
             openwrt-src/bin/targets/**/feeds.buildinfo
@@ -216,14 +275,14 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: openwrt-src/dl
-          key: openwrt-dl-${{ runner.os }}-${{ env.OPENWRT_REF }}-${{ steps.openwrt_state.outputs.openwrt_sha }}-${{ steps.config_state.outputs.config_hash }}
+          key: openwrt-dl-${{ runner.os }}-${{ env.OPENWRT_REF }}-${{ steps.openwrt_state.outputs.openwrt_sha }}-${{ steps.config_state.outputs.config_hash }}-${{ steps.third_party_state.outputs.third_party_hash }}
 
       - name: Save ccache
         if: always() && !cancelled()
         uses: actions/cache/save@v4
         with:
           path: .ccache
-          key: openwrt-ccache-${{ runner.os }}-${{ env.OPENWRT_REF }}-${{ steps.config_state.outputs.config_hash }}-${{ github.run_id }}
+          key: openwrt-ccache-${{ runner.os }}-${{ env.OPENWRT_REF }}-${{ steps.config_state.outputs.config_hash }}-${{ steps.third_party_state.outputs.third_party_hash }}-${{ github.run_id }}
 
       - name: Save incremental build cache
         if: success() && steps.cache_build_restore.outputs.cache-hit != 'true'
@@ -232,4 +291,4 @@ jobs:
           path: |
             openwrt-src/staging_dir
             openwrt-src/build_dir
-          key: openwrt-build-${{ runner.os }}-${{ env.OPENWRT_REF }}-${{ steps.openwrt_state.outputs.openwrt_sha }}-${{ steps.config_state.outputs.config_hash }}
+          key: openwrt-build-${{ runner.os }}-${{ env.OPENWRT_REF }}-${{ steps.openwrt_state.outputs.openwrt_sha }}-${{ steps.config_state.outputs.config_hash }}-${{ steps.third_party_state.outputs.third_party_hash }}
