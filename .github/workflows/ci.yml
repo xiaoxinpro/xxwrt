@@ -228,7 +228,6 @@ jobs:
             'xray-core',
             'chinadns-ng',
             'dns2tcp',
-            '3proxy',
             'mihomo',
             'shadow-tls',
             'naiveproxy',

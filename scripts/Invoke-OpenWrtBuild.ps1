@@ -48,7 +48,9 @@ function Invoke-OpenWrtMakeTarget {
 
   Write-Host "Parallel make target failed; retrying with -j1 V=s: $Target"
   & make $Target -j1 V=s
-  throw $FailureMessage
+  if ($LASTEXITCODE -ne 0) {
+    throw $FailureMessage
+  }
 }
 
 function Remove-PathIfExists {
