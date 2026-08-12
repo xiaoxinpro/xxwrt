@@ -234,7 +234,6 @@ jobs:
             'naiveproxy',
             'shadowsocks-rust-sslocal',
             'shadowsocks-rust-ssserver',
-            'simple-obfs-client',
             'v2ray-plugin',
             'shadowsocksr-libev-ssr-local',
             'shadowsocksr-libev-ssr-redir',

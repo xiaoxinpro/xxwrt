@@ -25,6 +25,7 @@
 - 构建结果依赖三个第三方仓库的分支状态，后续上游变更可能导致配置项或包名变化。
 - 由于选择“尽量全带上”的 SSR-Plus 后端，固件体积和编译时间都会明显增加。
 - 当前 `helloworld/dev` 不提供 Kcptun 包，因此不选择 `INCLUDE_Kcptun`；后续只有在上游恢复该包或接入兼容来源后才重新启用。
+- 当前 `helloworld/dev` 的 `simple-obfs` 在 OpenWrt `openwrt-25.12` 构建中失败，因此不选择 `INCLUDE_Shadowsocks_Simple_Obfs`；后续只有在上游修复或接入兼容来源后才重新启用。
 - MosDNS 包来源被显式覆盖，未来若要改回其他来源，需要同步调整冲突处理和 manifest 校验。
 
 ## 备选方案
